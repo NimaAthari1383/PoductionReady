@@ -1,0 +1,42 @@
+---
+- name: Preserve original Kea configuration once
+  ansible.builtin.copy:
+    src: /etc/kea/kea-dhcp4.conf
+    dest: /etc/kea/kea-dhcp4.conf.pre-ansible
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+  failed_when: false
+
+- name: Render clean Kea DHCP4 config
+  ansible.builtin.template:
+    src: kea-dhcp4.conf.j2
+    dest: /etc/kea/kea-dhcp4.conf
+    owner: _kea
+    group: _kea
+    mode: "0640"
+    backup: true
+  no_log: true
+
+- name: Validate Kea syntax
+  ansible.builtin.command: kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
+  changed_when: false
+  no_log: true
+
+- name: Validate hooks and database connectivity
+  ansible.builtin.command: kea-dhcp4 -T /etc/kea/kea-dhcp4.conf
+  changed_when: false
+  no_log: true
+
+- name: Reset stale systemd failure state
+  ansible.builtin.command: systemctl reset-failed isc-kea-dhcp4-server
+  changed_when: false
+  failed_when: false
+
+- name: Enable and start Kea DHCP4
+  ansible.builtin.service:
+    name: isc-kea-dhcp4-server
+    state: started
+    enabled: true

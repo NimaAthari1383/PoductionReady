@@ -1,0 +1,29 @@
+---
+- name: Render Stork Server environment
+  ansible.builtin.template:
+    src: server.env.j2
+    dest: "{{ stork_server_env_file }}"
+    owner: root
+    group: stork-server
+    mode: "0640"
+  no_log: true
+  notify: Restart Stork Server
+
+- name: Reset Stork Server failure state
+  ansible.builtin.command: systemctl reset-failed isc-stork-server
+  changed_when: false
+  failed_when: false
+
+- name: Enable and start Stork Server
+  ansible.builtin.systemd:
+    name: isc-stork-server
+    enabled: true
+    state: started
+
+- ansible.builtin.meta: flush_handlers
+
+- name: Wait for Stork Server port
+  ansible.builtin.wait_for:
+    host: "{{ stork_server_host }}"
+    port: "{{ stork_server_port }}"
+    timeout: 45

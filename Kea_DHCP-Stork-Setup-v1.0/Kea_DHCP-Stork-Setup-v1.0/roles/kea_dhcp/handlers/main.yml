@@ -1,0 +1,10 @@
+---
+- name: Restart PostgreSQL
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
+
+- name: Restart Kea DHCP4
+  ansible.builtin.service:
+    name: isc-kea-dhcp4-server
+    state: restarted

@@ -1,0 +1,162 @@
+---
+- name: Start PostgreSQL
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: Wait for PostgreSQL on TCP localhost
+  ansible.builtin.command:
+    argv: ["pg_isready", "-h", "{{ kea_pg_host }}", "-p", "{{ kea_pg_port | string }}"]
+  register: pg_ready
+  changed_when: false
+  retries: 20
+  delay: 1
+  until: pg_ready.rc == 0
+
+- name: Ensure /etc/kea exists
+  ansible.builtin.file:
+    path: /etc/kea
+    state: directory
+    owner: root
+    group: _kea
+    mode: "0750"
+
+- name: Check generated DB secret
+  ansible.builtin.stat:
+    path: "{{ kea_pg_password_file }}"
+  register: pg_secret_file
+
+- name: Generate strong non-default DB password once
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    while true; do
+      p="$(openssl rand -base64 48 | tr -d '\n')"
+      case "$p" in ""|"1234"|"*****"|"keatest") continue ;; esac
+      printf '%s' "$p" > "{{ kea_pg_password_file }}"
+      break
+    done
+  args:
+    executable: /bin/bash
+  when: not pg_secret_file.stat.exists
+  no_log: true
+
+- name: Protect DB secret
+  ansible.builtin.file:
+    path: "{{ kea_pg_password_file }}"
+    owner: root
+    group: _kea
+    mode: "0640"
+
+- name: Read DB secret
+  ansible.builtin.slurp:
+    src: "{{ kea_pg_password_file }}"
+  register: pg_secret
+  no_log: true
+
+- name: Set DB password fact
+  ansible.builtin.set_fact:
+    kea_pg_password: "{{ pg_secret.content | b64decode | trim }}"
+  no_log: true
+
+- name: Reject weak/default Kea credentials
+  ansible.builtin.assert:
+    that:
+      - kea_pg_password | length >= 24
+      - kea_pg_password not in ["1234", "*****", "keatest"]
+  no_log: true
+
+- name: Create or update PostgreSQL role
+  community.postgresql.postgresql_user:
+    name: "{{ kea_pg_user }}"
+    password: "{{ kea_pg_password }}"
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+
+- name: Create Kea database
+  community.postgresql.postgresql_db:
+    name: "{{ kea_pg_db }}"
+    owner: "{{ kea_pg_user }}"
+    encoding: UTF8
+    state: present
+  become_user: postgres
+
+- name: Grant public schema privileges
+  community.postgresql.postgresql_query:
+    db: "{{ kea_pg_db }}"
+    query: 'GRANT ALL PRIVILEGES ON SCHEMA public TO "{{ kea_pg_user }}";'
+  become_user: postgres
+
+- name: Detect existing Kea schema
+  community.postgresql.postgresql_query:
+    db: "{{ kea_pg_db }}"
+    query: "SELECT to_regclass('public.schema_version') AS schema_version;"
+  become_user: postgres
+  register: schema_check
+
+- name: Initialize Kea PostgreSQL schema
+  ansible.builtin.command:
+    argv:
+      - kea-admin
+      - db-init
+      - pgsql
+      - -h
+      - "{{ kea_pg_host }}"
+      - -P
+      - "{{ kea_pg_port | string }}"
+      - -u
+      - "{{ kea_pg_user }}"
+      - -p
+      - "{{ kea_pg_password }}"
+      - -n
+      - "{{ kea_pg_db }}"
+  when: schema_check.query_result[0].schema_version is none
+  no_log: true
+
+- name: Verify Kea DB credentials over TCP
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -h
+      - "{{ kea_pg_host }}"
+      - -p
+      - "{{ kea_pg_port | string }}"
+      - -U
+      - "{{ kea_pg_user }}"
+      - -d
+      - "{{ kea_pg_db }}"
+      - -tAc
+      - "SELECT 1;"
+  environment:
+    PGPASSWORD: "{{ kea_pg_password }}"
+  register: pg_auth
+  changed_when: false
+  no_log: true
+
+- name: Ensure DB auth works
+  ansible.builtin.assert:
+    that:
+      - pg_auth.rc == 0
+  no_log: true
+
+- name: Verify Kea DB schema version
+  ansible.builtin.command:
+    argv:
+      - kea-admin
+      - db-version
+      - pgsql
+      - -h
+      - "{{ kea_pg_host }}"
+      - -P
+      - "{{ kea_pg_port | string }}"
+      - -u
+      - "{{ kea_pg_user }}"
+      - -p
+      - "{{ kea_pg_password }}"
+      - -n
+      - "{{ kea_pg_db }}"
+  changed_when: false
+  no_log: true

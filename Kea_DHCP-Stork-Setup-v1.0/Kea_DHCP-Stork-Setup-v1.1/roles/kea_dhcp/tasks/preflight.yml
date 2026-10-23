@@ -1,0 +1,78 @@
+---
+- name: Validate platform and required variables
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "Debian"
+      - ansible_facts.distribution == "Ubuntu"
+      - kea_dhcp_interface | length > 0
+      - kea_server_address | length > 0
+      - kea_subnet | length > 0
+      - kea_pool_start | length > 0
+      - kea_pool_end | length > 0
+      - kea_pg_host == "127.0.0.1"
+      - kea_external_dhcp_probe_mode in ["off", "warn", "fail"]
+    fail_msg: "Invalid variables. PostgreSQL is intentionally forced over TCP 127.0.0.1."
+
+- name: Assert DHCP interface exists
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp_interface in ansible_facts.interfaces
+    fail_msg: "Interface {{ kea_dhcp_interface }} does not exist."
+
+- name: Validate subnet, server IP and dynamic pool
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import ipaddress, sys
+        net=ipaddress.ip_network(sys.argv[1], strict=False)
+        srv=ipaddress.ip_address(sys.argv[2])
+        start=ipaddress.ip_address(sys.argv[3])
+        end=ipaddress.ip_address(sys.argv[4])
+        strict=sys.argv[5].lower()=="true"
+        assert srv in net, f"{srv} outside {net}"
+        assert start in net and end in net, "pool outside subnet"
+        assert int(start) <= int(end), "pool start > pool end"
+        if strict:
+            assert not int(start) <= int(srv) <= int(end), "server IP inside dynamic pool"
+        print("NETWORK_PREFLIGHT_OK")
+      - "{{ kea_subnet }}"
+      - "{{ kea_server_address }}"
+      - "{{ kea_pool_start }}"
+      - "{{ kea_pool_end }}"
+      - "{{ kea_fail_if_server_ip_in_dynamic_pool | string | lower }}"
+  changed_when: false
+
+- name: Check local UDP/67
+  ansible.builtin.shell: "ss -H -lunp 2>/dev/null | awk '$5 ~ /:67$/ {print}'"
+  args:
+    executable: /bin/bash
+  register: udp67_before
+  changed_when: false
+  failed_when: false
+  when: kea_check_competing_local_dhcp | bool
+
+- name: Abort when another local DHCP service already owns UDP/67
+  ansible.builtin.assert:
+    that:
+      - udp67_before.stdout | trim == "" or "kea-dhcp4" in udp67_before.stdout
+    fail_msg: "Another local service owns UDP/67: {{ udp67_before.stdout }}"
+  when: kea_check_competing_local_dhcp | bool
+
+- name: Require stable Kea server IP when Netplan management is disabled
+  ansible.builtin.assert:
+    that:
+      - kea_server_address in (ansible_facts.all_ipv4_addresses | default([]))
+    fail_msg: >-
+      {{ kea_server_address }} is absent. Make it static first or set
+      kea_manage_netplan=true.
+  when: not kea_manage_netplan | bool
+
+
+- name: Display reservation policy
+  ansible.builtin.debug:
+    msg:
+      - "Dynamic pool: {{ kea_pool_start }} - {{ kea_pool_end }}"
+      - "Reservations inside dynamic pool allowed: {{ not (kea_reservations_out_of_pool | bool) }}"
+      - "Kea will look up reservations before normal dynamic allocation."

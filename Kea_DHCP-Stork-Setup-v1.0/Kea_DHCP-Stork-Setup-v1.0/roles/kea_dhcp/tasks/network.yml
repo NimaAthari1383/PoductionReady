@@ -1,0 +1,32 @@
+---
+- name: Install netplan
+  ansible.builtin.apt:
+    name: netplan.io
+    state: present
+    update_cache: true
+
+- name: Write Kea static-address Netplan override
+  ansible.builtin.template:
+    src: 99-kea-static.yaml.j2
+    dest: /etc/netplan/99-kea-static.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  register: netplan_cfg
+
+- name: Validate Netplan
+  ansible.builtin.command: netplan generate
+  changed_when: false
+
+- name: Apply Netplan
+  ansible.builtin.command: netplan apply
+  when: netplan_cfg.changed
+
+- name: Confirm new address exists
+  ansible.builtin.command: "ip -4 addr show dev {{ kea_dhcp_interface }}"
+  register: addr_after
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: kea_server_address in addr_after.stdout

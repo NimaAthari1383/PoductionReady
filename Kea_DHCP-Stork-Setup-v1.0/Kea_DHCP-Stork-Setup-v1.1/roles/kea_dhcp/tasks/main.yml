@@ -1,0 +1,8 @@
+---
+- ansible.builtin.import_tasks: preflight.yml
+- ansible.builtin.import_tasks: network.yml
+  when: kea_manage_netplan | bool
+- ansible.builtin.import_tasks: install.yml
+- ansible.builtin.import_tasks: postgres.yml
+- ansible.builtin.import_tasks: kea.yml
+- ansible.builtin.import_tasks: validate.yml

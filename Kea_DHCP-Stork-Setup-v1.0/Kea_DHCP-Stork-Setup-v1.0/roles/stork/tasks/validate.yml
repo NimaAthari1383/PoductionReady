@@ -1,0 +1,22 @@
+---
+- name: Verify Stork Server active
+  ansible.builtin.command: systemctl is-active isc-stork-server
+  register: stork_server_active
+  changed_when: false
+  failed_when: stork_server_active.stdout | trim != "active"
+
+- name: Verify Stork Agent active
+  ansible.builtin.command: systemctl is-active isc-stork-agent
+  register: stork_agent_active
+  changed_when: false
+  failed_when: stork_agent_active.stdout | trim != "active"
+
+- name: Verify Stork HTTP UI
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ stork_server_port }}/"
+    method: GET
+    status_code: [200, 301, 302, 307, 308]
+  register: stork_http
+  retries: 5
+  delay: 2
+  until: stork_http is succeeded

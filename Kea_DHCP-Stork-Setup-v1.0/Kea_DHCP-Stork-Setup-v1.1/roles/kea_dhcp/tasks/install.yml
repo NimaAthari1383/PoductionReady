@@ -1,0 +1,90 @@
+---
+- name: Install bootstrap packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - openssl
+      - postgresql
+      - postgresql-client
+      - python3-psycopg2
+      - socat
+      - nmap
+    state: present
+    update_cache: true
+
+- name: Check ISC Cloudsmith repo
+  ansible.builtin.stat:
+    path: "/etc/apt/sources.list.d/isc-kea-{{ kea_repo_series }}.list"
+  register: repo_file
+
+- name: Download official ISC repo bootstrap
+  ansible.builtin.get_url:
+    url: "https://dl.cloudsmith.io/public/isc/kea-{{ kea_repo_series }}/setup.deb.sh"
+    dest: "/tmp/isc-kea-{{ kea_repo_series }}-setup.deb.sh"
+    mode: "0700"
+  when: not repo_file.stat.exists
+
+- name: Configure official ISC Kea repository
+  ansible.builtin.command: "bash /tmp/isc-kea-{{ kea_repo_series }}-setup.deb.sh"
+  when: not repo_file.stat.exists
+
+- name: Refresh apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install Kea and PostgreSQL integration
+  ansible.builtin.apt:
+    name:
+      - isc-kea
+      - isc-kea-admin
+      - isc-kea-hooks
+      - isc-kea-pgsql
+    state: present
+
+- name: Stop Kea until final validated config is ready
+  ansible.builtin.service:
+    name: isc-kea-dhcp4-server
+    state: stopped
+  failed_when: false
+
+- name: Discover installed Kea hook directory without assuming CPU architecture
+  ansible.builtin.shell: |
+    set -o pipefail
+    find /usr/lib /usr/local/lib \
+      -type f \
+      -path '*/kea/hooks/libdhcp_pgsql.so' \
+      -printf '%h\n' 2>/dev/null | head -n 1
+  args:
+    executable: /bin/bash
+  register: kea_hook_dir_discovery
+  changed_when: false
+
+- name: Fail if Kea PostgreSQL hook directory cannot be discovered
+  ansible.builtin.assert:
+    that:
+      - kea_hook_dir_discovery.stdout | trim | length > 0
+    fail_msg: >-
+      libdhcp_pgsql.so was not found after installing isc-kea-pgsql.
+      Verify that the ISC Kea repository/package matches this Ubuntu architecture.
+
+- name: Set discovered Kea hook directory
+  ansible.builtin.set_fact:
+    kea_hook_dir: "{{ kea_hook_dir_discovery.stdout | trim }}"
+
+- name: Check required hook libraries
+  ansible.builtin.stat:
+    path: "{{ kea_hook_dir }}/{{ item }}"
+  register: hook_check
+  loop:
+    - libdhcp_pgsql.so
+    - libdhcp_lease_cmds.so
+    - libdhcp_host_cmds.so
+    - libdhcp_subnet_cmds.so
+
+- name: Fail if a required hook is absent
+  ansible.builtin.assert:
+    that: item.stat.exists
+    fail_msg: "Missing Kea hook: {{ item.item }}"
+  loop: "{{ hook_check.results }}"

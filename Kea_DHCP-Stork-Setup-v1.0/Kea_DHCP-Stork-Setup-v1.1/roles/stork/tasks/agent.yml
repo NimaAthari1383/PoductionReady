@@ -1,0 +1,34 @@
+---
+- name: Add Stork Agent to Kea group
+  ansible.builtin.user:
+    name: stork-agent
+    groups: _kea
+    append: true
+
+- name: Render Stork Agent environment
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ stork_agent_env_file }}"
+    owner: root
+    group: stork-agent
+    mode: "0640"
+  notify: Restart Stork Agent
+
+- name: Reset Stork Agent failure state
+  ansible.builtin.command: systemctl reset-failed isc-stork-agent
+  changed_when: false
+  failed_when: false
+
+- name: Enable and start Stork Agent
+  ansible.builtin.systemd:
+    name: isc-stork-agent
+    enabled: true
+    state: started
+
+- ansible.builtin.meta: flush_handlers
+
+- name: Wait for Stork Agent port
+  ansible.builtin.wait_for:
+    host: "{{ stork_agent_host }}"
+    port: "{{ stork_agent_port }}"
+    timeout: 45

@@ -1,0 +1,7 @@
+network:
+  version: 2
+  ethernets:
+    {{ kea_dhcp_interface }}:
+      dhcp4: false
+      addresses:
+        - {{ kea_server_address }}/{{ kea_server_prefix }}

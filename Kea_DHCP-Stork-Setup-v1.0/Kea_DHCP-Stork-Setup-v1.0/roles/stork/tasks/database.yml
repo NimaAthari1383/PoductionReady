@@ -1,0 +1,62 @@
+---
+- name: Check Stork DB password file
+  ansible.builtin.stat:
+    path: "{{ stork_db_password_file }}"
+  register: stork_password_file
+
+- name: Generate strong Stork DB password once
+  ansible.builtin.shell: |
+    umask 077
+    openssl rand -base64 36 | tr -d '\n' > {{ stork_db_password_file | quote }}
+  args:
+    executable: /bin/bash
+  when: not stork_password_file.stat.exists
+  no_log: true
+
+- name: Read Stork DB password
+  ansible.builtin.slurp:
+    src: "{{ stork_db_password_file }}"
+  register: stork_password_slurp
+  no_log: true
+
+- name: Set Stork DB password fact
+  ansible.builtin.set_fact:
+    stork_db_password: "{{ stork_password_slurp.content | b64decode | trim }}"
+  no_log: true
+
+- name: Reject unsafe Stork DB password
+  ansible.builtin.assert:
+    that:
+      - stork_db_password | length >= 24
+      - stork_db_password not in ['1234', '*****', 'stork', 'password']
+  no_log: true
+
+- name: Create or update Stork PostgreSQL role
+  community.postgresql.postgresql_user:
+    name: "{{ stork_db_user }}"
+    password: "{{ stork_db_password }}"
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+
+- name: Create Stork PostgreSQL database
+  community.postgresql.postgresql_db:
+    name: "{{ stork_db_name }}"
+    owner: "{{ stork_db_user }}"
+    state: present
+  become_user: postgres
+
+- name: Verify Stork database authentication over TCP
+  ansible.builtin.command:
+    argv: [psql, -h, "{{ stork_db_host }}", -p, "{{ stork_db_port | string }}", -U, "{{ stork_db_user }}", -d, "{{ stork_db_name }}", -tAc, "SELECT current_user || ':' || current_database();"]
+  environment:
+    PGPASSWORD: "{{ stork_db_password }}"
+  register: stork_db_test
+  changed_when: false
+  no_log: true
+
+- name: Assert Stork database authentication
+  ansible.builtin.assert:
+    that:
+      - "stork_db_user ~ ':' ~ stork_db_name in stork_db_test.stdout"

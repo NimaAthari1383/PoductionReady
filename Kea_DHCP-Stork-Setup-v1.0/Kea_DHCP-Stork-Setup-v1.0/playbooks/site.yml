@@ -1,0 +1,18 @@
+---
+- name: Bootstrap Python on raw Ubuntu host
+  hosts: kea_servers
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Ensure Python is present
+      ansible.builtin.raw: |
+        test -x /usr/bin/python3 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3)
+      changed_when: false
+
+- name: Install and configure ISC Kea DHCPv4
+  hosts: kea_servers
+  gather_facts: true
+  become: true
+  roles:
+    - role: kea_dhcp
+    - role: stork

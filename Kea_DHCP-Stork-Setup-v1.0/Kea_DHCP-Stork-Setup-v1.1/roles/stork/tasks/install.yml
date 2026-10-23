@@ -1,0 +1,37 @@
+---
+- name: Install Stork repository prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, postgresql-client]
+    state: present
+    update_cache: true
+
+- name: Check whether Stork repository is configured
+  ansible.builtin.shell: |
+    grep -RqsE 'cloudsmith.*isc/stork|dl\.cloudsmith\.io/public/isc/stork'       /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null
+  args:
+    executable: /bin/bash
+  register: stork_repo_present
+  changed_when: false
+  failed_when: false
+
+- name: Configure official ISC Stork repository
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -1sLf {{ stork_repo_setup_url | quote }} | bash
+  args:
+    executable: /bin/bash
+  when: stork_repo_present.rc != 0
+
+- name: Install Stork Server and Agent
+  ansible.builtin.apt:
+    name: [isc-stork-server, isc-stork-agent]
+    state: present
+    update_cache: true
+
+- name: Ensure Stork configuration directory exists
+  ansible.builtin.file:
+    path: /etc/stork
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"

@@ -1,0 +1,11 @@
+---
+- name: Restart Stork Server
+  ansible.builtin.systemd:
+    name: isc-stork-server
+    state: restarted
+    daemon_reload: true
+- name: Restart Stork Agent
+  ansible.builtin.systemd:
+    name: isc-stork-agent
+    state: restarted
+    daemon_reload: true

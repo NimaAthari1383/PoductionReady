@@ -1,0 +1,26 @@
+---
+kea_repo_series: "3-2"
+kea_dhcp_interface: ""
+kea_server_address: ""
+kea_server_prefix: 24
+kea_subnet: ""
+kea_pool_start: ""
+kea_pool_end: ""
+kea_dns_servers: []
+kea_domain_name: ""
+kea_domain_search: []
+kea_renew_timer: 900
+kea_rebind_timer: 1800
+kea_valid_lifetime: 3600
+kea_reservations_out_of_pool: false
+kea_pg_host: "127.0.0.1"
+kea_pg_port: 5432
+kea_pg_db: "kea"
+kea_pg_user: "kea"
+kea_pg_password_file: "/etc/kea/.kea_pg_password"
+kea_manage_netplan: false
+kea_fail_if_server_ip_in_dynamic_pool: true
+kea_check_competing_local_dhcp: true
+kea_external_dhcp_probe_mode: "warn"
+kea_log_severity: "INFO"
+kea_log_debuglevel: 0

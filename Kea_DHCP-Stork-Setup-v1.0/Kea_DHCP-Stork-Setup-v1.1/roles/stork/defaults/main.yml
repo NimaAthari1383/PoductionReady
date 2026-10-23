@@ -1,0 +1,14 @@
+---
+stork_repo_setup_url: "https://dl.cloudsmith.io/public/isc/stork/cfg/setup/bash.deb.sh"
+stork_db_name: "stork"
+stork_db_user: "stork"
+stork_db_host: "127.0.0.1"
+stork_db_port: 5432
+stork_db_password_file: "/etc/stork/.stork_db_password"
+stork_server_host: "{{ kea_server_address }}"
+stork_server_port: 8080
+stork_agent_host: "{{ kea_server_address }}"
+stork_agent_port: 8081
+stork_enable_lease_tracking: true
+stork_server_env_file: "/etc/stork/server.env"
+stork_agent_env_file: "/etc/stork/agent.env"

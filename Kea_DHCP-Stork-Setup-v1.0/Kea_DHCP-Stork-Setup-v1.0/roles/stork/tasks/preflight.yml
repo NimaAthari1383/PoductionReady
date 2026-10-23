@@ -1,0 +1,10 @@
+---
+- name: Validate Stork variables
+  ansible.builtin.assert:
+    that:
+      - stork_db_host == "127.0.0.1"
+      - stork_db_name | length > 0
+      - stork_db_user | length > 0
+      - stork_server_host | length > 0
+      - stork_agent_host | length > 0
+    fail_msg: "Invalid Stork variables; PostgreSQL is intentionally forced over TCP 127.0.0.1."

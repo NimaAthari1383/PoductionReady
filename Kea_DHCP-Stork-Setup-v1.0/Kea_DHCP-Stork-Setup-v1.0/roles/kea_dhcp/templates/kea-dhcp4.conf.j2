@@ -1,0 +1,89 @@
+{
+  "Dhcp4": {
+    "interfaces-config": {
+      "interfaces": ["{{ kea_dhcp_interface }}/{{ kea_server_address }}"]
+    },
+
+    "control-socket": {
+      "socket-type": "unix",
+      "socket-name": "/var/run/kea/kea4-ctrl-socket"
+    },
+
+    "lease-database": {
+      "type": "memfile",
+      "persist": true,
+      "name": "/var/lib/kea/kea-leases4.csv",
+      "lfc-interval": 3600
+    },
+
+    "hosts-databases": [
+      {
+        "type": "postgresql",
+        "name": "{{ kea_pg_db }}",
+        "user": "{{ kea_pg_user }}",
+        "password": "{{ kea_pg_password }}",
+        "host": "{{ kea_pg_host }}",
+        "port": {{ kea_pg_port }},
+        "readonly": false
+      }
+    ],
+
+    "hooks-libraries": [
+      { "library": "{{ kea_hook_dir }}/libdhcp_pgsql.so" },
+      { "library": "{{ kea_hook_dir }}/libdhcp_lease_cmds.so" },
+      { "library": "{{ kea_hook_dir }}/libdhcp_host_cmds.so" },
+      { "library": "{{ kea_hook_dir }}/libdhcp_subnet_cmds.so" }
+    ],
+
+    "host-reservation-identifiers": ["hw-address", "client-id"],
+    "reservations-lookup-first": true,
+    "ip-reservations-unique": true,
+
+    "renew-timer": {{ kea_renew_timer }},
+    "rebind-timer": {{ kea_rebind_timer }},
+    "valid-lifetime": {{ kea_valid_lifetime }},
+
+    "option-data": [
+      {
+        "name": "domain-name-servers",
+        "data": "{{ kea_dns_servers | join(', ') }}"
+      },
+      {
+        "name": "domain-name",
+        "data": "{{ kea_domain_name }}"
+      }{% if kea_domain_search | length > 0 %},
+      {
+        "name": "domain-search",
+        "data": "{{ kea_domain_search | join(', ') }}"
+      }{% endif %}
+    ],
+
+    "subnet4": [
+      {
+        "id": 1,
+        "subnet": "{{ kea_subnet }}",
+        "interface": "{{ kea_dhcp_interface }}",
+        "reservations-out-of-pool": {{ kea_reservations_out_of_pool | bool | lower }},
+        "pools": [
+          { "pool": "{{ kea_pool_start }} - {{ kea_pool_end }}" }
+        ],
+        "reservations": []
+      }
+    ],
+
+    "multi-threading": {
+      "enable-multi-threading": true,
+      "thread-pool-size": 0,
+      "packet-queue-size": 64
+    },
+
+    "loggers": [
+      {
+        "name": "kea-dhcp4",
+        "output-options": [{ "output": "stdout" }],
+        "severity": "{{ kea_log_severity }}",
+        "debuglevel": {{ kea_log_debuglevel }}
+      }
+    ]
+  }
+}

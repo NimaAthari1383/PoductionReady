@@ -1,0 +1,86 @@
+---
+- name: Wait until Kea is active
+  ansible.builtin.command: systemctl is-active isc-kea-dhcp4-server
+  register: kea_active
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: kea_active.stdout | trim == "active"
+
+- name: Verify expected UDP/67 listener
+  ansible.builtin.shell: |
+    set -o pipefail
+    ss -H -lunp | grep -F '{{ kea_server_address }}:67' | grep -F 'kea-dhcp4'
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Wait for control socket
+  ansible.builtin.stat:
+    path: /var/run/kea/kea4-ctrl-socket
+  register: ctrl
+  retries: 10
+  delay: 1
+  until: ctrl.stat.exists
+
+- name: List Kea control commands
+  ansible.builtin.shell: |
+    printf '%s\n' '{"command":"list-commands"}' |
+      socat - UNIX-CONNECT:/var/run/kea/kea4-ctrl-socket
+  args:
+    executable: /bin/bash
+  register: commands
+  changed_when: false
+
+- name: Verify host reservation command hooks
+  ansible.builtin.assert:
+    that:
+      - '"reservation-get" in commands.stdout'
+      - '"reservation-add" in commands.stdout'
+      - '"reservation-del" in commands.stdout'
+      - '"reservation-update" in commands.stdout'
+    fail_msg: >-
+      Kea is running, but Host Commands hook operations are not available.
+      Expected reservation-get/reservation-add/reservation-del/reservation-update.
+
+- name: Search for known fatal signatures
+  ansible.builtin.shell: |
+    journalctl -u isc-kea-dhcp4-server --since '2 minutes ago' --no-pager |
+    grep -Ei 'DHCP4_CONFIG_LOAD_FAIL|DHCP4_INIT_FAIL|illegal use of a default value as credential|DHCPSRV_NO_SOCKETS_OPEN' || true
+  args:
+    executable: /bin/bash
+  register: fatal_signatures
+  changed_when: false
+
+- name: Ensure known fatal signatures are absent
+  ansible.builtin.assert:
+    that:
+      - fatal_signatures.stdout | trim == ""
+    fail_msg: "{{ fatal_signatures.stdout }}"
+
+- name: Probe broadcast domain for DHCP offers
+  ansible.builtin.command:
+    argv: ["nmap", "--script", "broadcast-dhcp-discover", "-e", "{{ kea_dhcp_interface }}"]
+  register: dhcp_probe
+  changed_when: false
+  failed_when: false
+  when: kea_external_dhcp_probe_mode != "off"
+
+- name: Show DHCP probe output
+  ansible.builtin.debug:
+    var: dhcp_probe.stdout_lines
+  when:
+    - kea_external_dhcp_probe_mode != "off"
+    - dhcp_probe.stdout | default('') | length > 0
+
+- name: Deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "ISC Kea DHCPv4: SUCCESS"
+      - "Listener: {{ kea_server_address }}:67/udp on {{ kea_dhcp_interface }}"
+      - "Subnet: {{ kea_subnet }}"
+      - "Dynamic pool: {{ kea_pool_start }} - {{ kea_pool_end }}"
+      - "Host reservations: PostgreSQL {{ kea_pg_host }}:{{ kea_pg_port }}/{{ kea_pg_db }}"
+      - "Lease backend: memfile"
+      - "Control socket: /var/run/kea/kea4-ctrl-socket"
+      - "DB password generated automatically and never printed"
