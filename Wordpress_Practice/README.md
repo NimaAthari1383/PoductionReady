@@ -14,6 +14,8 @@
 - [Run Nginx Container](#run-nginx-container)
 - [Get Backup](#get-backup)
 
+- [Compose File](#compose-file)
+
 ---
 
 ## HLD
@@ -146,31 +148,31 @@ tree ./nginx
 Add wordpress configuration file to nginx directory recently created:
 
 ```bash
-  cat <<'ROT' > ./nginx/conf.d/wordpress.conf
-  server {
-    listen 443 ssl;
+cat <<'ROT' > ./nginx/conf.d/wordpress.conf
+server {
+  listen 443 ssl;
+  server_name wp.nima.local;
+
+  # SSL
+  ssl_certificate /etc/nginx/certs/cert.pem;
+  ssl_certificate_key /etc/nginx/certs/key.pem;
+
+  location / {
+    proxy_pass            http://wordpress:80;
+    proxy_set_header  Host              $http_host;   # required for docker client's sake
+    proxy_set_header  X-Real-IP         $remote_addr; # pass on real client's IP
+    proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header  X-Forwarded-Proto $scheme;
+    add_header X-Powered-By "Nima Athari | wp.nima.local";
+    }
+}
+
+server {
+    listen 80;
     server_name wp.nima.local;
-
-    # SSL
-    ssl_certificate /etc/nginx/certs/cert.pem;
-    ssl_certificate_key /etc/nginx/certs/key.pem;
-
-    location / {
-      proxy_pass            http://wordpress:80;
-      proxy_set_header  Host              $http_host;   # required for docker client's sake
-      proxy_set_header  X-Real-IP         $remote_addr; # pass on real client's IP
-      proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
-      proxy_set_header  X-Forwarded-Proto $scheme;
-      add_header X-Powered-By "Nima Athari | wp.nima.local";
-      }
-  }
-
-  server {
-      listen 80;
-      server_name wp.nima.local;
-      return 301 https://$host$request_uri;
-  }
-  ROT
+    return 301 https://$host$request_uri;
+}
+ROT
 ```
 
 ***[🔝 Table Of Contents](#table-of-contents)***
@@ -237,3 +239,59 @@ du -sh full-backup-*.sql
 ```
 
 ***[🔝 Table Of Contents](#table-of-contents)***
+
+---
+
+## Compose File
+
+Compose file is available in "". For skipping all steps and setup scenario, just need to execute this command:
+
+```bash
+sh nginx_config.sh ; docker compose up -d
+```
+
+It's introduced and detailed at follow.
+
+***[🔝 Table Of Contents](#table-of-contents)***
+
+---
+
+## Dockerfiles
+
+There are some images which defined in custome dockerfiles. In all dockerfiles, first used a base image used **`FROM`**:
+
+```bash
+FROM mysql:latest
+```
+
+Then maintainer is available as **`LABEL`**:
+
+```bash
+LABEL maintainers="Nima Athari"
+```
+
+Updated apt repo and installed bash_completion just for test:
+
+```bash
+RUN apt update \
+    && apt install -y bash-completion 
+```
+
+For nginx , also configured logging using below commands:
+
+```bash
+RUN ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+```
+
+Expose 80 and 443 ports for nginx:
+
+```bash
+EXPOSE 80 443
+```
+
+Use a process to set nginx state up:
+
+```bash
+CMD ["nginx","-g","daemon off;"]
+```

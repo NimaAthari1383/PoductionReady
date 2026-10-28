@@ -1,0 +1,78 @@
+name: Nima-WP-Practice
+
+networks:
+  wp-net:
+    name: wp-net
+    driver: bridge
+
+volumes:
+  db-data:
+  wp-data:
+
+services:
+
+  mysql:
+    image: ${MYSQL_IMAGE_FULL}
+    build:
+      context: .
+      dockerfile: mysql-Dockerfile
+    container_name: mysql
+    hostname: mysql
+    restart: always
+    networks:
+      - wp-net
+    volumes:
+      - db-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD required}
+      MYSQL_DATABASE: DevOps
+      MYSQL_USER: DevOps
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD required}
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -u root --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  wordpress:
+    image: ${WORDPRESS_IMAGE_FULL}
+    build:
+      context: .
+      dockerfile: wordpress-Dockerfile
+    container_name: wordpress
+    hostname: wordpress
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - wp-net
+    volumes:
+      - wp-data:/var/www/html
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_USER: DevOps
+      WORDPRESS_DB_NAME: DevOps
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD required}
+
+  nginx:
+    image: ${NGINX_IMAGE_FULL}
+    build:
+      context: .
+      dockerfile: nginx-Dockerfile
+    container_name: nginx
+    hostname: nginx
+    restart: always
+    depends_on:
+      - wordpress
+    networks:
+      - wp-net
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      # - ./nginx_config.sh:/docker-entrypoint.d/nginx_config.sh:ro
+    # entrypoint: ["/bin/sh", "./nginx_config.sh"]
+    ports:
+      - "80:80"
+      - "443:443"

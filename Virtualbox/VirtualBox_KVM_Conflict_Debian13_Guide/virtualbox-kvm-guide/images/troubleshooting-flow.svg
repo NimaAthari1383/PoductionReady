@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560">
+<rect width="900" height="560" fill="#f6f8fb"/>
+<text x="450" y="45" font-family="Arial,sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#172b4d">VirtualBox / KVM Troubleshooting Flow</text>
+<g font-family="Arial,sans-serif" font-size="18" text-anchor="middle" fill="#172b4d">
+<rect x="240" y="75" width="420" height="66" rx="12" fill="#e5efff" stroke="#3572b0" stroke-width="2"/><text x="450" y="104">VM fails to start:</text><text x="450" y="127">VERR_VMX_IN_VMX_ROOT_MODE</text>
+<path d="M450 141V178" stroke="#52667c" stroke-width="3"/><path d="M442 170L450 180L458 170" fill="none" stroke="#52667c" stroke-width="3"/>
+<rect x="230" y="180" width="440" height="62" rx="12" fill="#fff" stroke="#75869b" stroke-width="2"/><text x="450" y="207">Check KVM modules and active users</text><text x="450" y="229" font-family="monospace" font-size="15">lsmod | grep kvm; sudo fuser -v /dev/kvm</text>
+<path d="M450 242V281" stroke="#52667c" stroke-width="3"/><path d="M442 273L450 283L458 273" fill="none" stroke="#52667c" stroke-width="3"/>
+<rect x="180" y="284" width="540" height="66" rx="12" fill="#fff1db" stroke="#c58a27" stroke-width="2"/><text x="450" y="311">Shut down QEMU/KVM VMs, then unload</text><text x="450" y="334" font-family="monospace" font-size="16">sudo modprobe -r kvm_intel kvm</text>
+<path d="M450 350V387" stroke="#52667c" stroke-width="3"/><path d="M442 379L450 389L458 379" fill="none" stroke="#52667c" stroke-width="3"/>
+<rect x="180" y="390" width="540" height="65" rx="12" fill="#e1f6e9" stroke="#368355" stroke-width="2"/><text x="450" y="417">Try the VM again; for a persistent fix use:</text><text x="450" y="441" font-family="monospace" font-size="16">options kvm enable_virt_at_load=0</text>
+<path d="M450 455V493" stroke="#52667c" stroke-width="3"/><path d="M442 485L450 495L458 485" fill="none" stroke="#52667c" stroke-width="3"/>
+<rect x="280" y="495" width="340" height="48" rx="12" fill="#e5efff" stroke="#3572b0" stroke-width="2"/><text x="450" y="525">Reboot and validate</text>
+</g></svg>

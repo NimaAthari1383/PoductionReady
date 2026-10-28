@@ -1,0 +1,8 @@
+FROM wordpress:latest
+
+LABEL maintainers="Nima Athari"
+
+RUN apt update \
+    && apt install -y bash-completion
+
+STOPSIGNAL SIGQUIT
